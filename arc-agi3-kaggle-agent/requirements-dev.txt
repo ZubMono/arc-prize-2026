@@ -1,0 +1,4 @@
+# [arc-agi3-kaggle-agent] BL.20783 -- dependencias SOLO de desarrollo/tests. El agente en si no
+# tiene dependencias de terceros (stdlib pura) -- ver CLAUDE.md, seccion "Aislamiento". pytest
+# NUNCA viaja al notebook de submission.
+pytest>=8.0

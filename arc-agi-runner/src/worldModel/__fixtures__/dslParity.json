@@ -1,0 +1,2062 @@
+{
+  "version": 1,
+  "generatedFrom": "typescript",
+  "note": "Fixture DORADO de paridad del DSL de transformaciones grilla-a-grilla: el contrato ejecutable entre el motor canonico TypeScript (projects/arc-agi-runner/src/worldModel/primitiveOps.ts) y cualquier port a otro lenguaje (hoy, el agente Python offline de projects/arc-agi3-kaggle-agent, stdlib pura y sin red). Cada caso declara un programa y una grilla de entrada; \"expected\" es la salida EXACTA del motor TypeScript, CALCULADA por el generador, nunca escrita a mano (escribirla a mano crearia una tercera fuente de verdad que podria contradecir a las otras dos sin que nadie se entere). Un port es correcto si y solo si reproduce \"expected\" celda por celda, incluida la FORMA de la grilla, en los 95 casos. REGENERAR: cd projects/arc-agi-runner && npx tsx scripts/generateDslParityFixture.ts. Los casos se declaran en scripts/dslParityCases/*.ts; este JSON es generado y cualquier edicion manual la pisa la proxima regeneracion. El test src/worldModel/__tests__/dslParity.test.ts corre el fixture contra el TypeScript en cada CI: si alguien cambia el DSL y no regenera, el build del lado TS rompe antes de que el port se entere. CAMPOS: \"name\" identificador estable; \"why\" que semantica bloquea el caso (documentacion, no dato); \"program\" la secuencia de pasos; \"pre\" la grilla de entrada; \"anchor\" OPCIONAL, presente SOLO en casos de overlay, es la grilla ancla del PrimitiveContext (pasarla como anchorGrid; su ausencia significa contexto vacio, que es la rama defensiva de overlay: degrada a identidad); \"expected\" la salida. Todas las cadenas son ASCII a proposito, para que el lado Python (que por estilo del repo no usa tildes) pueda copiarlas sin transliterar. TRAMPAS DE PORT que este fixture cubre explicitamente: (1) indices negativos: TypeScript los corta con guards explicitos, Python indexa negativo SIN error y devuelve la fila/columna opuesta -- translate con dx/dy positivos pide sx/sy=-1 y floodFill acepta coordenadas negativas; (2) las claves numericas de recolor.mapping viajan en JSON como CADENAS: JavaScript las re-coacciona sola al indexar, Python no, hay que convertirlas a int al cargar; (3) mapear un color a 0 es legitimo: el TypeScript usa ?? (nullish), no \"or\", porque 0 es un color valido de ARC; (4) el fondo se DETECTA por frecuencia con desempate por color MENOR, y se re-detecta en CADA paso sobre la grilla intermedia, nunca una sola vez sobre la entrada; (5) los desempates de objectExtract son contrato: mas celdas, luego menor minY, luego menor minX; (6) conectividad 4 (nunca 8) y componentes MONO-COLOR; (7) formas degeneradas: grilla vacia, filas vacias (replicate con timesX=0 devuelve h filas VACIAS, no una grilla vacia), 1x1 y no cuadradas; (8) los primitivos NUNCA lanzan: parametros invalidos degradan a no-op (clon sin cambios). ARITMETICA: primitiveOps.ts no usa division entera en ningun lado, asi que no hay riesgo de redondeo divergente; la unica operacion no trivial es el modulo de replicate, que siempre opera sobre indices NO negativos (por eso la diferencia de signo entre el % de JavaScript y el de Python no se manifiesta) y que nunca se evalua con h o w en cero porque los loops no iteran -- un port que precalcule el modulo fuera del loop se come un ZeroDivisionError donde el TypeScript simplemente no hace nada.",
+  "sourceHash": "0d9a05cabcc659356ad1898bee6afc667609ee17142ae29fbe40ea636cdaf6be",
+  "sourceFiles": ["src/worldModel/grid.ts", "src/worldModel/primitiveOps.ts"],
+  "cases": [
+    {
+      "name": "translate_dx_positivo_rellena_con_fondo_detectado",
+      "why": "Caso base: el hueco que deja el desplazamiento se rellena con el fondo DETECTADO (el color mas frecuente), no con cero fijo.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 1,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 0, 5],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "translate_dx_positivo_no_envuelve_por_la_columna_final",
+      "why": "TRAMPA DE PORT: con dx=1 la columna 0 pide sx=-1. TS lo corta con el guard y pone fondo; Python indexaria grid[y][-1] y traeria la ULTIMA columna (9,8,7). El esperado no contiene 9/8/7 en ningun lado.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 1,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 4, 9],
+        [0, 0, 8],
+        [0, 0, 7]
+      ],
+      "expected": [
+        [0, 0, 4],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "translate_dy_positivo_no_envuelve_por_la_fila_final",
+      "why": "TRAMPA DE PORT, eje Y: con dy=1 la fila 0 pide sy=-1. Python traeria la ULTIMA fila ([0,0,4]) en vez de fondo.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 0,
+            "dy": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 4]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [1, 2, 3],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "translate_dx_negativo_desborda_por_la_derecha",
+      "why": "Con dx negativo el indice se pasa por ARRIBA (sx >= w). Ahi Python tira IndexError en vez de envolver, asi que la falla es ruidosa -- pero el guard tiene que existir igual.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": -2,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3, 4],
+        [5, 0, 0, 0]
+      ],
+      "expected": [
+        [3, 4, 0, 0],
+        [0, 0, 0, 0]
+      ]
+    },
+    {
+      "name": "translate_dx_y_dy_negativos_a_la_vez",
+      "why": "Desplazamiento diagonal hacia arriba-izquierda: ejercita los dos guards de borde superior en la misma pasada.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": -1,
+            "dy": -1
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 6, 6, 0],
+        [0, 6, 0, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [6, 6, 0, 0],
+        [6, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0]
+      ]
+    },
+    {
+      "name": "translate_desplazamiento_mayor_que_la_grilla",
+      "why": "Cuando el desplazamiento supera el ancho, NINGUNA celda origen es valida: la salida es fondo puro. Un port con modulo implicito devolveria la grilla intacta.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 5,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [
+        [2, 2, 0],
+        [0, 3, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "translate_empate_de_fondo_gana_el_color_de_menor_indice",
+      "why": "detectBackgroundColor desempata por color MENOR (3 y 5 aparecen 3 veces cada uno -> gana 3). El relleno del translate es el unico observable de ese desempate.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 0,
+            "dy": 1
+          }
+        }
+      ],
+      "pre": [
+        [3, 3],
+        [5, 5],
+        [3, 5]
+      ],
+      "expected": [
+        [3, 3],
+        [3, 3],
+        [5, 5]
+      ]
+    },
+    {
+      "name": "translate_grilla_1x1_rellena_con_su_unico_color",
+      "why": "Grilla minima: el unico color ES el fondo, asi que desplazar no cambia nada visible. Bloquea que el port no asuma fondo=0.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 1,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [[7]],
+      "expected": [[7]]
+    },
+    {
+      "name": "translate_grilla_vacia_no_explota",
+      "why": "Grilla vacia: h=0 y w=0, los loops no corren y la salida es vacia. Un port que calcule w como len(grid[0]) revienta con IndexError antes de llegar aca.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 1,
+            "dy": 1
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "translate_cero_es_identidad",
+      "why": "dx=0,dy=0 debe ser identidad exacta, incluso sobre una grilla sin fondo dominante claro.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 0,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2],
+        [3, 4]
+      ]
+    },
+    {
+      "name": "reflect_horizontal_invierte_columnas",
+      "why": "'horizontal' es espejo IZQUIERDA-DERECHA (invierte cada fila). El nombre del eje se presta a leerlo al reves.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+      ],
+      "expected": [
+        [3, 2, 1],
+        [6, 5, 4],
+        [9, 8, 7]
+      ]
+    },
+    {
+      "name": "reflect_vertical_invierte_filas",
+      "why": "'vertical' es espejo ARRIBA-ABAJO (invierte el orden de las filas), no el de las columnas.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "vertical"
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+      ],
+      "expected": [
+        [7, 8, 9],
+        [4, 5, 6],
+        [1, 2, 3]
+      ]
+    },
+    {
+      "name": "reflect_horizontal_no_cuadrada_2x4",
+      "why": "Grilla no cuadrada: reflejar horizontal conserva las dimensiones. Un port que transponga por error cambia la forma.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3, 4],
+        [5, 6, 7, 8]
+      ],
+      "expected": [
+        [4, 3, 2, 1],
+        [8, 7, 6, 5]
+      ]
+    },
+    {
+      "name": "reflect_vertical_no_cuadrada_4x2",
+      "why": "Complemento del anterior con la forma traspuesta, para que un port que confunda los ejes falle en uno de los dos si o si.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "vertical"
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4],
+        [5, 6],
+        [7, 8]
+      ],
+      "expected": [
+        [7, 8],
+        [5, 6],
+        [3, 4],
+        [1, 2]
+      ]
+    },
+    {
+      "name": "reflect_horizontal_fila_unica",
+      "why": "Una sola fila: el reflejo horizontal es el unico que hace algo. Verifica que no se copie la referencia de la fila (el TS hace slice antes de reverse).",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        }
+      ],
+      "pre": [[1, 2, 3, 4]],
+      "expected": [[4, 3, 2, 1]]
+    },
+    {
+      "name": "reflect_horizontal_1x1_es_identidad",
+      "why": "Grilla minima: cualquier reflejo es identidad.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        }
+      ],
+      "pre": [[6]],
+      "expected": [[6]]
+    },
+    {
+      "name": "reflect_vertical_grilla_vacia",
+      "why": "Grilla vacia: reflejar nada devuelve nada, sin excepciones.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "vertical"
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "rotate_1_cuarto_horario_no_cuadrada",
+      "why": "Un cuarto de giro HORARIO sobre 2x3 devuelve 3x2: la fila superior pasa a ser la columna derecha. Antihorario da la traspuesta espejada, y el diff canta.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [4, 1],
+        [5, 2],
+        [6, 3]
+      ]
+    },
+    {
+      "name": "rotate_2_cuartos_conserva_dimensiones",
+      "why": "180 grados sobre la MISMA grilla del caso anterior: conserva 2x3 y equivale a reflejar en los dos ejes.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 2
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [6, 5, 4],
+        [3, 2, 1]
+      ]
+    },
+    {
+      "name": "rotate_3_cuartos_es_el_inverso_de_1",
+      "why": "Tres cuartos sobre la MISMA grilla: mismas dimensiones que rotate 1 pero contenido invertido. Los tres casos comparten `pre` justamente para que la comparacion entre ellos sea directa.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 3
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [3, 6],
+        [2, 5],
+        [1, 4]
+      ]
+    },
+    {
+      "name": "rotate_1_convierte_fila_en_columna",
+      "why": "De 1x4 a 4x1: el caso mas sensible al orden de los indices en el port (out[x][h-1-y] = grid[y][x]).",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        }
+      ],
+      "pre": [[1, 2, 3, 4]],
+      "expected": [[1], [2], [3], [4]]
+    },
+    {
+      "name": "rotate_1_grilla_1x1_es_identidad",
+      "why": "Grilla minima: rotar no cambia nada, pero el port tiene que construir la salida con las dimensiones intercambiadas igual.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        }
+      ],
+      "pre": [[8]],
+      "expected": [[8]]
+    },
+    {
+      "name": "rotate_2_grilla_vacia",
+      "why": "Grilla vacia con DOS giros encadenados: verifica que el resultado intermedio vacio siga siendo rotable.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 2
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "rotate_1_asimetrica_3x3",
+      "why": "Grilla 3x3 sin ninguna simetria: cualquier confusion de eje u orientacion produce un diff, cosa que una grilla simetrica ocultaria.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 0, 0],
+        [2, 3, 0],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [4, 2, 1],
+        [5, 3, 0],
+        [6, 0, 0]
+      ]
+    },
+    {
+      "name": "recolor_mapping_total",
+      "why": "Caso base: todos los colores presentes estan en el mapping.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "1": 4,
+              "2": 5
+            }
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [2, 1]
+      ],
+      "expected": [
+        [4, 5],
+        [5, 4]
+      ]
+    },
+    {
+      "name": "recolor_mapping_parcial_deja_intactos_los_no_mapeados",
+      "why": "Los colores ausentes del mapping quedan IGUAL (identidad), no en 0 ni en undefined.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "3": 6
+            }
+          }
+        }
+      ],
+      "pre": [
+        [3, 1, 3],
+        [2, 3, 0]
+      ],
+      "expected": [
+        [6, 1, 6],
+        [2, 6, 0]
+      ]
+    },
+    {
+      "name": "recolor_mapping_vacio_es_identidad",
+      "why": "Mapping vacio = no-op. En JSON es un objeto {} y el port no debe confundirlo con null.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {}
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2],
+        [3, 4]
+      ]
+    },
+    {
+      "name": "recolor_destino_cero_no_es_falsy",
+      "why": "TRAMPA DE PORT: mapear 3 -> 0 debe dar 0. TS usa ?? (nullish); un port con `or` devolveria 3 porque 0 es falsy.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "3": 0
+            }
+          }
+        }
+      ],
+      "pre": [
+        [3, 3, 1],
+        [1, 3, 1]
+      ],
+      "expected": [
+        [0, 0, 1],
+        [1, 0, 1]
+      ]
+    },
+    {
+      "name": "recolor_origen_cero_es_clave_valida",
+      "why": "TRAMPA DE PORT: la clave 0 viaja al JSON como la cadena \"0\". Un port que la descarte por falsy (o que no convierta la clave a int) deja el fondo sin recolorear.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "0": 8
+            }
+          }
+        }
+      ],
+      "pre": [
+        [0, 1, 0],
+        [1, 0, 1]
+      ],
+      "expected": [
+        [8, 1, 8],
+        [1, 8, 1]
+      ]
+    },
+    {
+      "name": "recolor_clave_ausente_en_la_grilla_es_identidad",
+      "why": "Un mapping que apunta a un color inexistente no debe alterar nada ni agregar colores nuevos.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "9": 1
+            }
+          }
+        }
+      ],
+      "pre": [
+        [2, 2],
+        [2, 3]
+      ],
+      "expected": [
+        [2, 2],
+        [2, 3]
+      ]
+    },
+    {
+      "name": "recolor_grilla_vacia",
+      "why": "Grilla vacia: map sobre cero filas devuelve cero filas.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "1": 2
+            }
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "floodFill_region_conexa_completa",
+      "why": "Caso base: pinta el bloque conexo de 1 y NO toca el bloque de 2, aunque compartan la grilla.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 0,
+            "y": 0,
+            "to": 7
+          }
+        }
+      ],
+      "pre": [
+        [1, 1, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 2, 2],
+        [0, 0, 2, 2]
+      ],
+      "expected": [
+        [7, 7, 0, 0],
+        [7, 7, 0, 0],
+        [0, 0, 2, 2],
+        [0, 0, 2, 2]
+      ]
+    },
+    {
+      "name": "floodFill_conectividad_4_no_propaga_en_diagonal",
+      "why": "Las diagonales NO conectan: arrancando del 3 central se pinta UNA sola celda, no las cinco. Un port con vecindad 8 pinta las cinco.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 1,
+            "y": 1,
+            "to": 6
+          }
+        }
+      ],
+      "pre": [
+        [3, 0, 3],
+        [0, 3, 0],
+        [3, 0, 3]
+      ],
+      "expected": [
+        [3, 0, 3],
+        [0, 6, 0],
+        [3, 0, 3]
+      ]
+    },
+    {
+      "name": "floodFill_pinta_la_region_de_fondo",
+      "why": "El origen puede ser una celda de fondo: la region a pintar se define por el COLOR del origen, no por ser foreground.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 0,
+            "y": 0,
+            "to": 4
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 5, 5, 0],
+        [0, 5, 0, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [4, 4, 4, 4],
+        [4, 5, 5, 4],
+        [4, 5, 4, 4],
+        [4, 4, 4, 4]
+      ]
+    },
+    {
+      "name": "floodFill_destino_igual_al_origen_no_cambia_nada",
+      "why": "Pintar del color que ya tiene es un no-op observable; sirve para detectar ports que se cuelguen en un ciclo por marcar visitados con el color destino en vez de con un set.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 1,
+            "y": 1,
+            "to": 5
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 5],
+        [0, 5, 5]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 5, 5],
+        [0, 5, 5]
+      ]
+    },
+    {
+      "name": "floodFill_coordenada_fuera_de_rango_es_no_op",
+      "why": "x=5 en una grilla de ancho 3: el guard devuelve un clon sin cambios. Nunca lanza.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 5,
+            "y": 0,
+            "to": 9
+          }
+        }
+      ],
+      "pre": [
+        [1, 1, 1],
+        [1, 2, 1],
+        [1, 1, 1]
+      ],
+      "expected": [
+        [1, 1, 1],
+        [1, 2, 1],
+        [1, 1, 1]
+      ]
+    },
+    {
+      "name": "floodFill_coordenada_negativa_es_no_op",
+      "why": "TRAMPA DE PORT: x=-1 debe ser no-op. Python leeria grid[0][-1] (la ultima columna, color 1) y pintaria todo el marco.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": -1,
+            "y": 0,
+            "to": 9
+          }
+        }
+      ],
+      "pre": [
+        [1, 1, 1],
+        [1, 2, 1],
+        [1, 1, 1]
+      ],
+      "expected": [
+        [1, 1, 1],
+        [1, 2, 1],
+        [1, 1, 1]
+      ]
+    },
+    {
+      "name": "floodFill_grilla_1x1",
+      "why": "Grilla minima con coordenada valida: la unica celda cambia.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 0,
+            "y": 0,
+            "to": 9
+          }
+        }
+      ],
+      "pre": [[4]],
+      "expected": [[9]]
+    },
+    {
+      "name": "floodFill_grilla_vacia_es_no_op",
+      "why": "Grilla vacia: el guard de rango corta antes de leer nada, aunque las coordenadas sean 0,0.",
+      "program": [
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 0,
+            "y": 0,
+            "to": 9
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "conditionalRecolor_all_recolorea_todas_las_celdas_del_origen",
+      "why": "Con predicate 'all' equivale a un recolor de un solo color, sin mirar vecinos.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 3,
+            "to": 7,
+            "predicate": "all"
+          }
+        }
+      ],
+      "pre": [
+        [3, 0, 3],
+        [0, 3, 0],
+        [3, 3, 3]
+      ],
+      "expected": [
+        [7, 0, 7],
+        [0, 7, 0],
+        [7, 7, 7]
+      ]
+    },
+    {
+      "name": "conditionalRecolor_border_incluye_borde_de_grilla_y_contacto_con_otro_color",
+      "why": "'border' es la union de dos condiciones distintas: tocar el borde de la grilla O tener un vecino de otro color. El bloque 3x3 centrado tiene su anillo recoloreado y su centro intacto.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 3,
+            "to": 7,
+            "predicate": "border"
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0, 0],
+        [0, 3, 3, 3, 0],
+        [0, 3, 3, 3, 0],
+        [0, 3, 3, 3, 0],
+        [0, 0, 0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0, 0, 0],
+        [0, 7, 7, 7, 0],
+        [0, 7, 3, 7, 0],
+        [0, 7, 7, 7, 0],
+        [0, 0, 0, 0, 0]
+      ]
+    },
+    {
+      "name": "conditionalRecolor_interior_es_el_complemento_exacto_de_border",
+      "why": "MISMA grilla que el caso anterior con el predicado opuesto: solo la celda central sobrevive al filtro. Los dos casos juntos prueban que la particion es exacta.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 3,
+            "to": 7,
+            "predicate": "interior"
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0, 0],
+        [0, 3, 3, 3, 0],
+        [0, 3, 3, 3, 0],
+        [0, 3, 3, 3, 0],
+        [0, 0, 0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0, 0, 0],
+        [0, 3, 3, 3, 0],
+        [0, 3, 7, 3, 0],
+        [0, 3, 3, 3, 0],
+        [0, 0, 0, 0, 0]
+      ]
+    },
+    {
+      "name": "conditionalRecolor_border_en_1x1_todo_es_borde",
+      "why": "En una grilla 1x1 la unica celda toca los cuatro bordes: el chequeo de borde de grilla dispara ANTES de mirar vecinos, que no existen.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 3,
+            "to": 6,
+            "predicate": "border"
+          }
+        }
+      ],
+      "pre": [[3]],
+      "expected": [[6]]
+    },
+    {
+      "name": "conditionalRecolor_interior_en_1x1_no_cambia_nada",
+      "why": "Complemento del anterior: no hay interior posible, asi que la salida es identica a la entrada.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 3,
+            "to": 6,
+            "predicate": "interior"
+          }
+        }
+      ],
+      "pre": [[3]],
+      "expected": [[3]]
+    },
+    {
+      "name": "conditionalRecolor_origen_ausente_es_no_op",
+      "why": "Si el color origen no esta en la grilla no se toca nada, sin importar el predicado.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 9,
+            "to": 1,
+            "predicate": "all"
+          }
+        }
+      ],
+      "pre": [
+        [2, 2],
+        [2, 2]
+      ],
+      "expected": [
+        [2, 2],
+        [2, 2]
+      ]
+    },
+    {
+      "name": "conditionalRecolor_interior_en_uniforme_3x3_solo_el_centro",
+      "why": "TRAMPA DE PORT, la mas fina del fixture: en una grilla uniforme 3x3 el interior es EXACTAMENTE la celda central; las otras ocho tocan el borde de la grilla. Un port que evalue los vecinos sin chequear primero el borde recolorea las nueve, porque en Python los vecinos con indice -1 de las celdas del borde envuelven y devuelven el mismo color.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 5,
+            "to": 1,
+            "predicate": "interior"
+          }
+        }
+      ],
+      "pre": [
+        [5, 5, 5],
+        [5, 5, 5],
+        [5, 5, 5]
+      ],
+      "expected": [
+        [5, 5, 5],
+        [5, 1, 5],
+        [5, 5, 5]
+      ]
+    },
+    {
+      "name": "conditionalRecolor_border_sobre_franja_no_cuadrada",
+      "why": "Grilla 2x6: sin filas interiores, todo es borde. Verifica que el chequeo use w y h reales y no asuma cuadrada.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 4,
+            "to": 2,
+            "predicate": "border"
+          }
+        }
+      ],
+      "pre": [
+        [4, 4, 4, 0, 4, 4],
+        [4, 0, 4, 4, 4, 4]
+      ],
+      "expected": [
+        [2, 2, 2, 0, 2, 2],
+        [2, 0, 2, 2, 2, 2]
+      ]
+    },
+    {
+      "name": "conditionalRecolor_grilla_vacia",
+      "why": "Grilla vacia: no hay celdas que evaluar y la salida es vacia.",
+      "program": [
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 1,
+            "to": 2,
+            "predicate": "all"
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "cropToBBox_recorta_al_contenido",
+      "why": "Caso base: recorta el marco de fondo y deja solo el bloque de foreground.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0, 0],
+        [0, 4, 4, 0, 0],
+        [0, 4, 4, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0]
+      ],
+      "expected": [
+        [4, 4],
+        [4, 4]
+      ]
+    },
+    {
+      "name": "cropToBBox_grilla_uniforme_sin_foreground_es_no_op",
+      "why": "Sin ninguna celda distinta del fondo el bbox es null y se devuelve la grilla ENTERA sin cambios. Un port que inicialice minX/minY en 0 devolveria una grilla de 1x1 o vacia.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "cropToBBox_fondo_distinto_de_cero",
+      "why": "El fondo es 5, no 0: el recorte deja el bloque central de 0 y 7. Bloquea que el port hardcodee 0 como fondo, que es el valor tipico pero no el unico.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 5
+          }
+        }
+      ],
+      "pre": [
+        [5, 5, 5, 5],
+        [5, 0, 7, 5],
+        [5, 7, 0, 5],
+        [5, 5, 5, 5]
+      ],
+      "expected": [
+        [0, 7],
+        [7, 0]
+      ]
+    },
+    {
+      "name": "cropToBBox_usa_el_fondo_del_parametro_no_el_detectado",
+      "why": "MISMA grilla que el caso anterior pero pasando 7 como fondo. El fondo DETECTADO seria 5 (12 de 16 celdas); el primitivo tiene que obedecer el parametro igual, y con fondo 7 casi todo es foreground, asi que el bbox cubre la grilla entera y no recorta nada. Un port que detecte el fondo por su cuenta devuelve el 2x2 del centro y el diff es inmediato. El parametro existe justamente porque el generador de candidatos prueba varios fondos posibles.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 7
+          }
+        }
+      ],
+      "pre": [
+        [5, 5, 5, 5],
+        [5, 0, 7, 5],
+        [5, 7, 0, 5],
+        [5, 5, 5, 5]
+      ],
+      "expected": [
+        [5, 5, 5, 5],
+        [5, 0, 7, 5],
+        [5, 7, 0, 5],
+        [5, 5, 5, 5]
+      ]
+    },
+    {
+      "name": "cropToBBox_no_cuadrada_recorta_los_dos_ejes",
+      "why": "Grilla 3x6 con contenido descentrado: el recorte tiene que ajustar ancho y alto de forma independiente.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 7, 7, 0, 0],
+        [0, 0, 0, 7, 0, 0]
+      ],
+      "expected": [
+        [7, 7],
+        [0, 7]
+      ]
+    },
+    {
+      "name": "cropToBBox_una_sola_celda_de_foreground",
+      "why": "Una unica celda distinta del fondo produce una grilla 1x1: los limites del bbox son inclusivos en los dos extremos.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 2, 0]
+      ],
+      "expected": [[2]]
+    },
+    {
+      "name": "cropToBBox_grilla_vacia_es_no_op",
+      "why": "Grilla vacia: no hay foreground, el bbox es null y el clon vacio sale sin excepciones.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "overlay_sin_ancla_es_identidad",
+      "why": "RAMA DEFENSIVA: sin anchorGrid en el contexto overlay no puede hacer nada y devuelve un clon. Este caso NO trae campo `anchor` a proposito.",
+      "program": [
+        {
+          "name": "overlay",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "overlay_con_ancla_rellena_solo_el_fondo",
+      "why": "Caso base: las celdas de foreground de la grilla actual MANDAN; solo las de fondo toman el valor del ancla.",
+      "program": [
+        {
+          "name": "overlay",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "anchor": [
+        [1, 2, 3],
+        [4, 9, 6],
+        [7, 8, 9]
+      ],
+      "expected": [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+      ]
+    },
+    {
+      "name": "overlay_ancla_mas_chica_deja_intactas_las_celdas_sin_cobertura",
+      "why": "TRAMPA DE PORT: el ancla 2x2 no cubre la grilla 3x3. TS resuelve anchor[y]?.[x] a undefined y cae al valor original; Python tira IndexError (fila 2) o envuelve.",
+      "program": [
+        {
+          "name": "overlay",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "anchor": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2, 0],
+        [3, 5, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "overlay_ancla_mas_grande_usa_solo_la_region_coincidente",
+      "why": "El tamano de la SALIDA lo fija la grilla actual, no el ancla: las filas y columnas sobrantes del ancla se ignoran.",
+      "program": [
+        {
+          "name": "overlay",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 6],
+        [0, 0]
+      ],
+      "anchor": [
+        [1, 2, 3, 4],
+        [5, 6, 7, 8],
+        [9, 1, 2, 3],
+        [4, 5, 6, 7]
+      ],
+      "expected": [
+        [1, 6],
+        [5, 6]
+      ]
+    },
+    {
+      "name": "overlay_grilla_uniforme_toma_el_ancla_entera",
+      "why": "Si toda la grilla es fondo, el resultado ES el ancla. Extremo util para detectar la polaridad invertida (un port que pise el foreground en vez del fondo).",
+      "program": [
+        {
+          "name": "overlay",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0],
+        [0, 0]
+      ],
+      "anchor": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2],
+        [3, 4]
+      ]
+    },
+    {
+      "name": "replicate_2x1_tesela_horizontal",
+      "why": "Caso base: duplica en X y deja Y igual. El ancho se multiplica, el alto no.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2, 1, 2],
+        [3, 4, 3, 4]
+      ]
+    },
+    {
+      "name": "replicate_1x2_tesela_vertical",
+      "why": "Complemento del anterior sobre una grilla no cuadrada 1x3: verifica que no se confundan los ejes.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 1,
+            "timesY": 2
+          }
+        }
+      ],
+      "pre": [[1, 2, 3]],
+      "expected": [
+        [1, 2, 3],
+        [1, 2, 3]
+      ]
+    },
+    {
+      "name": "replicate_1x1_es_identidad",
+      "why": "Factor 1 en los dos ejes debe devolver una copia exacta.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 1,
+            "timesY": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ]
+    },
+    {
+      "name": "replicate_2x2_sobre_1x1",
+      "why": "Modulo sobre dimension 1: x % 1 y y % 1 son siempre 0. Grilla minima teselada a 2x2.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 2
+          }
+        }
+      ],
+      "pre": [[5]],
+      "expected": [
+        [5, 5],
+        [5, 5]
+      ]
+    },
+    {
+      "name": "replicate_3x1_sobre_no_cuadrada",
+      "why": "Tres repeticiones horizontales de una grilla 2x2: el patron se repite exacto, sin espejar (un port que alterne la direccion produciria un espejo en la segunda copia).",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 3,
+            "timesY": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 0]
+      ],
+      "expected": [
+        [1, 2, 1, 2, 1, 2],
+        [3, 0, 3, 0, 3, 0]
+      ]
+    },
+    {
+      "name": "replicate_2x2_completo",
+      "why": "Los dos ejes a la vez sobre una grilla asimetrica: bloquea el orden de los indices en la formula grid[y % h][x % w].",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 2
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2, 1, 2],
+        [3, 4, 3, 4],
+        [1, 2, 1, 2],
+        [3, 4, 3, 4]
+      ]
+    },
+    {
+      "name": "replicate_timesX_cero_produce_filas_vacias",
+      "why": "FORMA DEGENERADA: timesX=0 con timesY=1 no da una grilla vacia sino DOS filas vacias. La distincion importa porque aguas abajo cambia el hash de estado.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 0,
+            "timesY": 1
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [[], []]
+    },
+    {
+      "name": "replicate_timesY_cero_produce_grilla_vacia",
+      "why": "Complemento del anterior: con timesY=0 no hay ninguna fila, ni siquiera vacia.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 0
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": []
+    },
+    {
+      "name": "replicate_grilla_vacia_no_divide_por_cero",
+      "why": "Con h=0 el loop externo no corre, asi que el modulo nunca se evalua. Un port que calcule w o h fuera del loop y haga la division igual explota con ZeroDivisionError.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 2
+          }
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "replicate_filas_vacias_se_multiplican_pero_siguen_vacias",
+      "why": "Entrada degenerada (dos filas de ancho cero): salen cuatro filas vacias. Es la ida y vuelta del caso replicate_timesX_cero, y de nuevo el modulo por w=0 nunca se evalua.",
+      "program": [
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 2
+          }
+        }
+      ],
+      "pre": [[], []],
+      "expected": [[], [], [], []]
+    },
+    {
+      "name": "objectExtract_sin_color_elige_el_componente_mas_grande",
+      "why": "Caso base sin filtro de color: gana el objeto con MAS celdas (el bloque de 2, con 4 celdas) sobre el de 3 con 2 celdas.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0, 0],
+        [0, 2, 2, 0, 0],
+        [0, 2, 2, 0, 0],
+        [0, 0, 0, 3, 0],
+        [0, 0, 0, 3, 0]
+      ],
+      "expected": [
+        [2, 2],
+        [2, 2]
+      ]
+    },
+    {
+      "name": "objectExtract_con_color_ignora_los_demas_objetos",
+      "why": "MISMA grilla que el caso anterior pidiendo el color 3: el filtro se aplica ANTES del ranking, asi que gana un objeto que de otro modo perderia por tamano.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {
+            "color": 3
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0, 0],
+        [0, 2, 2, 0, 0],
+        [0, 2, 2, 0, 0],
+        [0, 0, 0, 3, 0],
+        [0, 0, 0, 3, 0]
+      ],
+      "expected": [[3], [3]]
+    },
+    {
+      "name": "objectExtract_empate_de_tamano_gana_el_de_menor_minY",
+      "why": "DESEMPATE NIVEL 2: dos objetos de 2 celdas; gana el que empieza mas arriba (el 4, en y=0). Un port que no ordene por minY puede devolver el 5 segun el orden de enumeracion.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 4, 0, 0],
+        [0, 4, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 5, 0],
+        [0, 0, 5, 0]
+      ],
+      "expected": [[4], [4]]
+    },
+    {
+      "name": "objectExtract_empate_de_tamano_y_de_minY_gana_el_de_menor_minX",
+      "why": "DESEMPATE NIVEL 3: dos objetos de 2 celdas que arrancan en la MISMA fila; decide la columna. Es el ultimo criterio, y sin el la eleccion quedaria a merced del orden del sort.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [6, 0, 0, 7],
+        [6, 0, 0, 7]
+      ],
+      "expected": [[6], [6]]
+    },
+    {
+      "name": "objectExtract_rellena_con_fondo_lo_que_no_pertenece_al_objeto",
+      "why": "Objeto en L: el bbox es 2x2 pero el objeto tiene 3 celdas. La celda restante sale con el color de FONDO, no con lo que hubiera en la grilla original.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 8, 0, 0],
+        [0, 8, 8, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [8, 0],
+        [8, 8]
+      ]
+    },
+    {
+      "name": "objectExtract_colores_adyacentes_distintos_son_componentes_separados",
+      "why": "Dos columnas pegadas de colores distintos NO son un objeto de 4 celdas: son dos de 2. El empate lo resuelve minX y gana la columna de 1. Un port que agrupe por \"todo lo que no es fondo\" devuelve una grilla 2x2 con los dos colores.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 1, 2, 0],
+        [0, 1, 2, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [[1], [1]]
+    },
+    {
+      "name": "objectExtract_conectividad_4_no_une_diagonales",
+      "why": "La celda diagonal suelta queda fuera del objeto grande: con vecindad 8 seria un unico componente de 4 celdas y el bbox cambiaria. El relleno de fondo en la esquina del bbox es la firma del resultado correcto.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 3, 0, 0],
+        [0, 0, 3, 0],
+        [0, 3, 3, 0]
+      ],
+      "expected": [
+        [0, 3],
+        [3, 3]
+      ]
+    },
+    {
+      "name": "objectExtract_sin_componentes_es_no_op",
+      "why": "Grilla uniforme: todo es fondo, no hay ningun componente y se devuelve la grilla entera sin cambios (no una grilla vacia).",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "objectExtract_color_inexistente_es_no_op",
+      "why": "Pedir un color que no esta en la grilla no es un error: el filtro deja cero componentes y sale un clon.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {
+            "color": 9
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "objectExtract_color_igual_al_fondo_es_no_op",
+      "why": "CONSECUENCIA NO OBVIA: el filtro de fondo corre ANTES que el de color, asi que pedir el color del fondo da cero componentes -> no-op. Un port que invierta ese orden devolveria el bbox del fondo.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {
+            "color": 0
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ]
+    },
+    {
+      "name": "objectExtract_desempate_de_fondo_en_grilla_1x2",
+      "why": "Grilla minima con empate de frecuencia: 0 y 5 aparecen una vez cada uno, gana 0 como fondo por ser el color menor, asi que el objeto es el 5. Si el port eligiera 5 como fondo, el resultado seria [[0]].",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [[0, 5]],
+      "expected": [[5]]
+    },
+    {
+      "name": "objectExtract_grilla_vacia_es_no_op",
+      "why": "Grilla vacia: cero componentes, clon vacio, sin excepciones al calcular el bbox.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        }
+      ],
+      "pre": [],
+      "expected": []
+    },
+    {
+      "name": "composicion_programa_vacio_es_identidad",
+      "why": "Un programa sin pasos devuelve un CLON de la entrada. Es el caso base del reduce y el unico donde el resultado no pasa por ningun primitivo.",
+      "program": [],
+      "pre": [
+        [1, 2],
+        [3, 4]
+      ],
+      "expected": [
+        [1, 2],
+        [3, 4]
+      ]
+    },
+    {
+      "name": "composicion_rotate1_luego_reflect_horizontal",
+      "why": "Dos pasos que cambian la forma: 2x3 -> 3x2 y el reflejo opera sobre la grilla YA rotada. Invertir el orden da otro resultado.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        },
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [1, 4],
+        [2, 5],
+        [3, 6]
+      ]
+    },
+    {
+      "name": "composicion_translate_negativo_luego_recolor",
+      "why": "El recolor final incluye el color de fondo, asi que tine tambien las celdas que el translate acaba de rellenar: el segundo paso ve el resultado del primero, no la entrada.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": -1,
+            "dy": 0
+          }
+        },
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "0": 3,
+              "7": 2
+            }
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 7, 0],
+        [0, 0, 0]
+      ],
+      "expected": [
+        [3, 3, 3],
+        [2, 3, 3],
+        [3, 3, 3]
+      ]
+    },
+    {
+      "name": "composicion_recolor_cambia_el_fondo_del_translate_siguiente",
+      "why": "CASO CLAVE DEL FIXTURE: antes del recolor el fondo es 1 (empate 1/4 resuelto por color menor); despues del recolor 1->7 el empate pasa a ser 4/7 y el fondo es 4. El relleno del translate delata cual de los dos se uso. Un port que detecte el fondo una sola vez falla solo aca.",
+      "program": [
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "1": 7
+            }
+          }
+        },
+        {
+          "name": "translate",
+          "params": {
+            "dx": 1,
+            "dy": 0
+          }
+        }
+      ],
+      "pre": [
+        [1, 1, 4],
+        [1, 4, 4]
+      ],
+      "expected": [
+        [4, 7, 7],
+        [4, 7, 4]
+      ]
+    },
+    {
+      "name": "composicion_cropToBBox_luego_replicate",
+      "why": "El replicate tesela la grilla RECORTADA (2x2), no la original (4x4): las dimensiones intermedias son parte del contrato.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        },
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 1
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 1, 2, 0],
+        [0, 3, 4, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [1, 2, 1, 2],
+        [3, 4, 3, 4]
+      ]
+    },
+    {
+      "name": "composicion_objectExtract_luego_rotate2",
+      "why": "El objeto en L se extrae con su relleno de fondo y recien despues se gira: el 180 tiene que caer sobre la grilla 2x2, no sobre la 4x4.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        },
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 2
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 8, 0, 0],
+        [0, 8, 8, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [8, 8],
+        [0, 8]
+      ]
+    },
+    {
+      "name": "composicion_overlay_despues_de_translate_usa_el_ancla_del_contexto",
+      "why": "El ancla NO se actualiza entre pasos: el overlay ve la grilla ya desplazada como \"actual\" pero sigue usando el ancla original del contexto. La celda 5 sobrevive en su posicion nueva y todo el resto viene del ancla.",
+      "program": [
+        {
+          "name": "translate",
+          "params": {
+            "dx": 1,
+            "dy": 0
+          }
+        },
+        {
+          "name": "overlay",
+          "params": {}
+        }
+      ],
+      "pre": [
+        [0, 0, 0],
+        [0, 5, 0],
+        [0, 0, 0]
+      ],
+      "anchor": [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+      ],
+      "expected": [
+        [1, 2, 3],
+        [4, 5, 5],
+        [7, 8, 9]
+      ]
+    },
+    {
+      "name": "composicion_doble_reflejo_vertical_es_identidad",
+      "why": "Invariante algebraica barata: reflejar dos veces por el mismo eje devuelve la entrada exacta. Si falla, el bug es de orientacion y no de encadenado.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "vertical"
+          }
+        },
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "vertical"
+          }
+        }
+      ],
+      "pre": [
+        [1, 2],
+        [3, 4],
+        [5, 6]
+      ],
+      "expected": [
+        [1, 2],
+        [3, 4],
+        [5, 6]
+      ]
+    },
+    {
+      "name": "composicion3_rotate_translate_recolor",
+      "why": "Tres pasos de familias distintas (forma, posicion, color) sobre una grilla asimetrica: cualquier permutacion del orden produce un resultado distinto.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 2
+          }
+        },
+        {
+          "name": "translate",
+          "params": {
+            "dx": 0,
+            "dy": 1
+          }
+        },
+        {
+          "name": "recolor",
+          "params": {
+            "mapping": {
+              "2": 6,
+              "3": 5
+            }
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 1],
+        [0, 2, 0],
+        [3, 0, 0]
+      ],
+      "expected": [
+        [0, 0, 0],
+        [0, 0, 5],
+        [0, 6, 0]
+      ]
+    },
+    {
+      "name": "composicion3_reflect_floodFill_conditionalRecolor",
+      "why": "El floodFill usa coordenadas ABSOLUTAS sobre la grilla ya reflejada: apunta a (3,0), que solo tiene color 1 despues del espejo. Un port que reflejara despues pintaria la region equivocada.",
+      "program": [
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        },
+        {
+          "name": "floodFill",
+          "params": {
+            "x": 3,
+            "y": 0,
+            "to": 5
+          }
+        },
+        {
+          "name": "conditionalRecolor",
+          "params": {
+            "from": 5,
+            "to": 9,
+            "predicate": "border"
+          }
+        }
+      ],
+      "pre": [
+        [1, 1, 0, 0],
+        [1, 1, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 2]
+      ],
+      "expected": [
+        [0, 0, 9, 9],
+        [0, 0, 9, 9],
+        [0, 0, 0, 0],
+        [2, 0, 0, 0]
+      ]
+    },
+    {
+      "name": "composicion3_cropToBBox_replicate_reflect",
+      "why": "Cadena que encoge, agranda y espeja: cada paso cambia las dimensiones o el orden, asi que un off-by-one en cualquiera de los tres se propaga hasta el final.",
+      "program": [
+        {
+          "name": "cropToBBox",
+          "params": {
+            "backgroundColor": 0
+          }
+        },
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 2,
+            "timesY": 1
+          }
+        },
+        {
+          "name": "reflect",
+          "params": {
+            "axis": "horizontal"
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 1, 2, 0],
+        [0, 0, 3, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [2, 1, 2, 1],
+        [3, 0, 3, 0]
+      ]
+    },
+    {
+      "name": "composicion3_objectExtract_replicate_rotate",
+      "why": "El fondo que objectExtract mete en el hueco de la L se tesela y despues se gira: verifica que ese relleno sea parte del objeto extraido y no un artefacto descartable.",
+      "program": [
+        {
+          "name": "objectExtract",
+          "params": {}
+        },
+        {
+          "name": "replicate",
+          "params": {
+            "timesX": 1,
+            "timesY": 2
+          }
+        },
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        }
+      ],
+      "pre": [
+        [0, 0, 0, 0],
+        [0, 8, 0, 0],
+        [0, 8, 8, 0],
+        [0, 0, 0, 0]
+      ],
+      "expected": [
+        [8, 8, 8, 8],
+        [8, 0, 8, 0]
+      ]
+    },
+    {
+      "name": "composicion3_cuatro_cuartos_de_giro_es_identidad",
+      "why": "Segunda invariante algebraica: 1+1+2 cuartos = 360 grados sobre una grilla no cuadrada, que ademas obliga a que las dimensiones vuelvan a 2x3 pasando por 3x2.",
+      "program": [
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        },
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 1
+          }
+        },
+        {
+          "name": "rotate",
+          "params": {
+            "quarterTurns": 2
+          }
+        }
+      ],
+      "pre": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ],
+      "expected": [
+        [1, 2, 3],
+        [4, 5, 6]
+      ]
+    }
+  ]
+}
