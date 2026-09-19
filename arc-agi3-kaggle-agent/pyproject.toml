@@ -1,0 +1,15 @@
+[project]
+name = "arc-agi3-kaggle-agent"
+version = "1.0.0"
+description = "Agente offline (sin red, sin LLM en inferencia) para el track ARC-AGI-3 de ARC Prize 2026 (Kaggle). Nucleo de decision en stdlib pura (arc_agent/) adaptado al contrato del framework oficial ARC-AGI-3-Agents por el wrapper MyAgent; el entregable es un unico agent/my_agent.py generado por submission/build_agent.py. Abierto bajo licencia MIT-0, como exige el ARC Prize."
+license = "MIT-0"
+# BL.21554: 3.12 es piso DURO, no preferencia. El paquete oficial `arc-agi` -- el motor de juego
+# que corre el gateway de Kaggle y que usa el loop local -- exige 3.12, igual que el framework
+# `ARC-AGI-3-Agents` (`requires-python >=3.12` en su propio pyproject). Declarar >=3.10 hacia que
+# `make setup` fallara recien al instalar, con el dia ya perdido.
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

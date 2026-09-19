@@ -1,0 +1,30 @@
+{
+  "name": "@invierte/arc-agi-runner",
+  "version": "1.0.0",
+  "description": "Agente baseline que juega los juegos publicos ARC-AGI-3 contra la API oficial y persiste scorecards. Auto-contenido (sin dependencias del monorepo privado) para poder abrirse bajo licencia MIT-0, como exige el ARC Prize.",
+  "license": "MIT-0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck -p tsconfig.json && tsc --noEmit --skipLibCheck -p tsconfig.scripts.json",
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "build:start": "pnpm run build && node dist/index.js",
+    "test": "node ../../scripts/lib/test-suite-budget.cjs -- vitest run",
+    "fixture:dsl-parity": "tsx scripts/generateDslParityFixture.ts",
+    "measure:replay-corpus": "tsx scripts/measureReplayCorpusSize.ts"
+  },
+  "dependencies": {
+    "mongodb": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=24.14.0"
+  }
+}
