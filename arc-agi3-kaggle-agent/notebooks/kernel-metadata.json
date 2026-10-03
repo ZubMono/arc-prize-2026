@@ -1,0 +1,16 @@
+{
+  "id": "luisignaciomoreno/arc-prize-2026-arc-agi-3-prometheus",
+  "title": "ARC Prize 2026 - ARC-AGI-3 Prometheus",
+  "code_file": "submission.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": false,
+  "keywords": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": ["arc-prize-2026-arc-agi-3"],
+  "model_sources": []
+}

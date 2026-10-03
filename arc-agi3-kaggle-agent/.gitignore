@@ -1,0 +1,30 @@
+# [arc-agi3-kaggle-agent] BL.20783 -- artefactos generados/transitorios, no versionados.
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+runtime_reports/
+
+# BL.21554 -- todo lo que baja del dataset de la competencia o se genera al construirlo. Son
+# cientos de MB de terceros (framework oficial, motor de juego, 25 juegos, wheels binarias) y no
+# tienen por que entrar al repo: `make setup` los reconstruye de cero con el token del .env
+# cifrado. El repo, ademas, se abre publico para el ARC Prize.
+.venv/
+vendor/
+environment_files/
+wheels/
+.cache/
+# Las mismas cuatro rutas SIN barra: `dir/` solo matchea directorios reales, y en un worktree de
+# agente estos activos se montan como SYMLINKS al checkout principal (bajarlos de nuevo por cada
+# worktree seria absurdo). Sin estas lineas, git los ve como archivos nuevos y los stagea.
+.venv
+vendor
+environment_files
+wheels
+recordings/
+logs.log
+# Credenciales locales de Kaggle: la fuente unica es el .env cifrado (BL.21581). Este directorio
+# solo aparece si alguien materializa el token a mano; nunca se versiona.
+.kaggle/
+# Artefacto de build: se regenera con `make notebook` desde agent/my_agent.py.
+notebooks/submission.ipynb
