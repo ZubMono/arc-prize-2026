@@ -1,0 +1,39 @@
+{
+  /* BL.21502 -- SIN "extends": este es el unico tsconfig del repo que NO hereda de
+     tsconfig.base.json, y la excepcion esta declarada en .claude/config/tsconfig-overrides.json
+     (el patron auditable que exige check-tsconfig-extends.cjs).
+
+     Motivo: el ARC Prize obliga a publicar el codigo bajo licencia de dominio publico, asi que
+     este proyecto tiene que poder EXTRAERSE del monorepo y compilar solo. Con el extends, la
+     copia extraida moria con TS5083 (Cannot read file '/tsconfig.base.json') y, en cascada, todo
+     el codigo async con TS2705/TS2468: sin la base no hay target/lib y TypeScript cae a ES5.
+     Verificado copiando el proyecto a un tmpdir fuera del monorepo, antes y despues.
+
+     Las opciones de abajo replican tsconfig.base.json a proposito. Es la MISMA frontera de
+     licencia que ya justifica los otros duplicados deliberados de este proyecto (vitest.config.ts
+     calcado en vez de importar vitest.shared, types.ts como mirror manual del contrato privado):
+     aca hay dos lados de una frontera, no una violacion de la regla de fuente unica. Si la base
+     del monorepo cambia, este archivo NO se entera -- es el costo aceptado de ser extraible. */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2024"],
+    "ignoreDeprecations": "5.0",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "allowJs": false,
+    "forceConsistentCasingInFileNames": false,
+    "strict": true,
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {},
+    "incremental": true,
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/node_modules.*/**", "dist", "**/__tests__/**", "**/*.test.ts"]
+}
