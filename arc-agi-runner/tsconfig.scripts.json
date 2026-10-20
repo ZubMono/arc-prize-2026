@@ -1,0 +1,16 @@
+{
+  /* [arc-agi-runner/tsconfig.scripts] BL.20860 -- typecheck de scripts/ SIN emitir.
+     tsconfig.json solo incluye src/**, y tsconfig.build.json emite a dist/ con rootDir en src/:
+     sumar scripts/ a cualquiera de los dos moveria la estructura de dist/ y romperia
+     `node dist/index.js`. Por eso scripts/ tiene su propio proyecto, noEmit y aislado.
+     Sin este archivo, `npx tsx scripts/*.ts` corre borrando tipos sin chequearlos y el generador
+     del fixture de paridad -- que es el productor del contrato con el port Python -- seria el
+     unico codigo TypeScript del proyecto sin verificar. */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": ["scripts/**/*"],
+  "exclude": ["node_modules", "**/node_modules.*/**", "dist"]
+}
